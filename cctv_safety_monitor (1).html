@@ -1,0 +1,819 @@
+<!DOCTYPE html>
+<html lang="en" class="dark">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>SENTINEL-VISION | Real-Time CCTV Women's Safety Monitoring System</title>
+  <script src="https://www.gstatic.com/antigravity/web/dev/tailwindcss.min.js"></script>
+  <style>
+    @keyframes pulse-red {
+      0%, 100% { box-shadow: 0 0 20px rgba(239, 68, 68, 0.4); border-color: rgb(239, 68, 68); }
+      50% { box-shadow: 0 0 45px rgba(239, 68, 68, 0.9); border-color: rgb(254, 202, 202); }
+    }
+    .alert-critical-active {
+      animation: pulse-red 1.2s infinite;
+    }
+    .scanline {
+      background: linear-gradient(to bottom, rgba(255,255,255,0), rgba(255,255,255,0) 50%, rgba(0, 0, 0, 0.3) 50%, rgba(0, 0, 0, 0.3));
+      background-size: 100% 4px;
+    }
+  </style>
+</head>
+<body class="bg-slate-950 text-slate-100 min-h-screen font-sans antialiased selection:bg-rose-500 selection:text-white p-4 lg:p-6">
+
+  <!-- Header & System Status Bar -->
+  <header class="flex flex-wrap items-center justify-between gap-4 border-b border-slate-800 pb-4 mb-5">
+    <div class="flex items-center gap-3">
+      <div class="relative flex h-3.5 w-3.5">
+        <span class="animate-ping absolute inline-flex h-full w-full rounded-full bg-emerald-400 opacity-75"></span>
+        <span class="relative inline-flex rounded-full h-3.5 w-3.5 bg-emerald-500" id="sys-status-indicator"></span>
+      </div>
+      <div>
+        <h1 class="text-xl font-bold tracking-tight text-white flex items-center gap-2">
+          <span>SENTINEL-VISION</span>
+          <span class="text-xs font-mono uppercase bg-rose-950/80 text-rose-300 border border-rose-800/60 px-2 py-0.5 rounded">AI CCTV Safety Protocol v4.2</span>
+        </h1>
+        <p class="text-xs text-slate-400">Autonomous Real-Time Threat & Vulnerability Monitoring Pipeline</p>
+      </div>
+    </div>
+
+    <!-- Active Pipeline Metrics -->
+    <div class="flex items-center gap-4 text-xs font-mono">
+      <div class="bg-slate-900 border border-slate-800 px-3 py-1.5 rounded flex items-center gap-2">
+        <span class="text-slate-400">FEED:</span>
+        <span class="text-cyan-400 font-bold" id="cam-id-display">CAM-04 (WEST ALLEYWAY)</span>
+      </div>
+      <div class="bg-slate-900 border border-slate-800 px-3 py-1.5 rounded flex items-center gap-2">
+        <span class="text-slate-400">LATENCY:</span>
+        <span class="text-emerald-400 font-bold" id="latency-display">18 ms</span>
+      </div>
+      <div class="bg-slate-900 border border-slate-800 px-3 py-1.5 rounded flex items-center gap-2">
+        <span class="text-slate-400">INFERENCE:</span>
+        <span class="text-amber-400 font-bold">58.4 FPS</span>
+      </div>
+      <button id="audio-toggle-btn" class="bg-slate-800 hover:bg-slate-700 text-slate-200 border border-slate-700 px-3 py-1.5 rounded flex items-center gap-1.5 transition">
+        <span id="audio-icon">🔊</span>
+        <span id="audio-text">Siren: Ready</span>
+      </button>
+    </div>
+  </header>
+
+  <!-- Main Grid Layout -->
+  <div class="grid grid-cols-1 lg:grid-cols-12 gap-5">
+    
+    <!-- LEFT 8 COLUMNS: Video Stream & Detection Overlays -->
+    <div class="lg:col-span-8 flex flex-col gap-4">
+      
+      <!-- Video Container with CCTV HUD -->
+      <div class="relative bg-black rounded-xl overflow-hidden border border-slate-800 shadow-2xl group" id="cctv-frame-container">
+        
+        <!-- Live HTML5 Canvas Simulating CCTV & Neural Overlays -->
+        <canvas id="cctv-canvas" width="800" height="460" class="w-full h-auto block bg-slate-950 scanline"></canvas>
+
+        <!-- CCTV HUD Top Bar Overlay -->
+        <div class="absolute top-3 left-4 right-4 flex justify-between items-center text-xs font-mono text-emerald-400 bg-black/60 backdrop-blur-sm px-3 py-1.5 rounded border border-emerald-500/20 pointer-events-none">
+          <div class="flex items-center gap-3">
+            <span class="inline-flex items-center gap-1 text-rose-500 font-bold">
+              <span class="h-2 w-2 rounded-full bg-rose-500 animate-pulse"></span> REC
+            </span>
+            <span id="hud-cam-name">CAM-04 [IR NIGHT VISION HD]</span>
+            <span class="text-slate-400">1080p @ 60FPS</span>
+          </div>
+          <div class="flex items-center gap-3">
+            <span id="hud-timestamp">2026-11-10 19:52:14 UTC</span>
+            <span class="text-emerald-300 bg-emerald-950/60 px-1.5 py-0.5 rounded border border-emerald-800 text-[11px]">ENCRYPTED FEED</span>
+          </div>
+        </div>
+
+        <!-- Automated Safety Alert Protocol Banner (Appears on Critical Vulnerability) -->
+        <div id="alert-banner" class="hidden absolute top-14 left-4 right-4 bg-rose-950/95 border-2 border-rose-500 text-rose-100 p-4 rounded-lg shadow-2xl backdrop-blur-md transition-all duration-300 alert-critical-active">
+          <div class="flex items-start justify-between gap-4">
+            <div class="flex items-start gap-3">
+              <div class="bg-rose-600 text-white p-2 rounded-lg font-bold text-lg animate-bounce">⚠️</div>
+              <div>
+                <div class="flex items-center gap-2">
+                  <span class="text-xs uppercase tracking-wider font-extrabold bg-rose-700 text-white px-2 py-0.5 rounded">AUTOMATED SAFETY ALERT ACTIVATED</span>
+                  <span class="text-xs font-mono text-rose-300">INCIDENT ID: #CRIT-9402</span>
+                </div>
+                <h3 class="text-base font-bold text-white mt-1">Vulnerability Threshold Exceeded (96.8%)</h3>
+                <p class="text-xs text-rose-200 mt-0.5">
+                  Universal SOS Gesture Recognized + Severe Facial Distress (Panic 94%) + Cornered/Isolated Encirclement.
+                </p>
+                <div class="mt-2.5 flex flex-wrap gap-2 text-xs font-mono">
+                  <span class="bg-rose-900/80 border border-rose-700 px-2 py-0.5 rounded text-white">🚨 Strobe Deterrent: FIRING</span>
+                  <span class="bg-rose-900/80 border border-rose-700 px-2 py-0.5 rounded text-white">🛰️ GPS: 28.6139° N, 77.2090° E</span>
+                  <span class="bg-rose-900/80 border border-rose-700 px-2 py-0.5 rounded text-white">🚓 Rapid Dispatch Unit: EN ROUTE (ETA: 90s)</span>
+                </div>
+              </div>
+            </div>
+            <button onclick="dismissAlert()" class="text-xs bg-rose-800 hover:bg-rose-700 text-white font-bold px-3 py-1.5 rounded transition">
+              Acknowledge
+            </button>
+          </div>
+        </div>
+
+        <!-- CCTV HUD Bottom Telemetry -->
+        <div class="absolute bottom-3 left-4 right-4 flex justify-between items-center text-xs font-mono text-slate-300 bg-black/70 backdrop-blur-sm px-3 py-1.5 rounded border border-slate-800 pointer-events-none">
+          <div class="flex items-center gap-4">
+            <span>DETECTIONS: <strong id="hud-subject-count" class="text-white">4 Individuals</strong></span>
+            <span>CROWD PRESSURE: <strong id="hud-crowd-density" class="text-emerald-400">Normal (0.28)</strong></span>
+          </div>
+          <div class="flex items-center gap-3">
+            <span>DISTRESS INDEX: <strong id="hud-threat-level" class="text-emerald-400">12% [SECURE]</strong></span>
+          </div>
+        </div>
+      </div>
+
+      <!-- Live Scenario Simulation Presets & Controls -->
+      <div class="bg-slate-900 border border-slate-800 rounded-xl p-4">
+        <div class="flex items-center justify-between mb-3">
+          <span class="text-xs font-bold uppercase tracking-wider text-slate-400">Simulate CCTV Scenarios</span>
+          <span class="text-xs text-slate-500">Test real-time neural multi-factor vulnerability triggers</span>
+        </div>
+        <div class="grid grid-cols-2 md:grid-cols-4 gap-2">
+          <button onclick="setScenario('normal')" id="btn-normal" class="px-3 py-2 rounded text-xs font-medium border bg-slate-800 border-slate-700 text-slate-300 hover:bg-slate-700 hover:text-white transition active:scale-95 text-left">
+            <div class="font-bold text-emerald-400">1. Normal Transit</div>
+            <div class="text-[11px] text-slate-400">Regular pedestrian flow</div>
+          </button>
+          <button onclick="setScenario('encircled')" id="btn-encircled" class="px-3 py-2 rounded text-xs font-medium border bg-slate-800 border-slate-700 text-slate-300 hover:bg-slate-700 hover:text-white transition active:scale-95 text-left">
+            <div class="font-bold text-amber-400">2. Encirclement</div>
+            <div class="text-[11px] text-slate-400">Isolation & high proximity</div>
+          </button>
+          <button onclick="setScenario('distress_gesture')" id="btn-distress" class="px-3 py-2 rounded text-xs font-medium border bg-slate-800 border-slate-700 text-slate-300 hover:bg-slate-700 hover:text-white transition active:scale-95 text-left">
+            <div class="font-bold text-orange-400">3. SOS Gesture</div>
+            <div class="text-[11px] text-slate-400">Universal thumb-fold signal</div>
+          </button>
+          <button onclick="setScenario('critical_threat')" id="btn-threat" class="px-3 py-2 rounded text-xs font-medium border bg-rose-950/60 border-rose-600 text-rose-200 hover:bg-rose-900 transition active:scale-95 text-left">
+            <div class="font-bold text-rose-400">4. Critical Threat 🔥</div>
+            <div class="text-[11px] text-rose-300">Triggers Automated Alert</div>
+          </button>
+        </div>
+
+        <!-- Overlays and Tuning -->
+        <div class="mt-4 pt-3 border-t border-slate-800/80 flex flex-wrap items-center justify-between gap-3 text-xs">
+          <div class="flex items-center gap-4">
+            <label class="flex items-center gap-1.5 cursor-pointer">
+              <input type="checkbox" id="chk-skeletons" checked class="rounded bg-slate-800 border-slate-700 text-rose-500 focus:ring-0">
+              <span class="text-slate-300">Pose & Gesture Skeletons</span>
+            </label>
+            <label class="flex items-center gap-1.5 cursor-pointer">
+              <input type="checkbox" id="chk-faces" checked class="rounded bg-slate-800 border-slate-700 text-rose-500 focus:ring-0">
+              <span class="text-slate-300">Facial Distress Mesh</span>
+            </label>
+            <label class="flex items-center gap-1.5 cursor-pointer">
+              <input type="checkbox" id="chk-proximity" checked class="rounded bg-slate-800 border-slate-700 text-rose-500 focus:ring-0">
+              <span class="text-slate-300">Crowd Encirclement Radius</span>
+            </label>
+          </div>
+          <div class="flex items-center gap-2">
+            <span class="text-slate-400">Alert Threshold:</span>
+            <input type="range" id="threshold-slider" min="50" max="95" value="75" class="w-24 accent-rose-500">
+            <span id="threshold-val" class="font-mono text-rose-400 font-bold">75%</span>
+          </div>
+        </div>
+      </div>
+
+    </div>
+
+    <!-- RIGHT 4 COLUMNS: Telemetry & Vulnerability Fusion Matrix -->
+    <div class="lg:col-span-4 flex flex-col gap-4">
+
+      <!-- Overall Vulnerability Index Meter -->
+      <div class="bg-slate-900 border border-slate-800 rounded-xl p-4">
+        <div class="flex justify-between items-center mb-2">
+          <h2 class="text-xs font-bold uppercase tracking-wider text-slate-400">Composite Vulnerability Score</h2>
+          <span id="threat-badge" class="px-2 py-0.5 text-xs font-bold rounded bg-emerald-950 text-emerald-400 border border-emerald-800">
+            SECURE
+          </span>
+        </div>
+        <div class="flex items-baseline gap-2 mb-2">
+          <span class="text-4xl font-extrabold font-mono text-white" id="vuln-percentage">14.2%</span>
+          <span class="text-xs text-slate-400">/ 100% threshold</span>
+        </div>
+        <!-- Progress Bar -->
+        <div class="w-full bg-slate-800 h-3 rounded-full overflow-hidden p-0.5 border border-slate-700">
+          <div id="vuln-bar" class="h-full rounded-full bg-gradient-to-r from-emerald-500 via-amber-500 to-rose-500 transition-all duration-300" style="width: 14.2%"></div>
+        </div>
+        <div class="mt-2 text-[11px] text-slate-400 flex justify-between font-mono">
+          <span>0.0 (Safe)</span>
+          <span>0.50 (Elevated)</span>
+          <span class="text-rose-400 font-bold">0.75 (CRITICAL)</span>
+        </div>
+      </div>
+
+      <!-- Real-Time Neural Indicators Breakdown -->
+      <div class="bg-slate-900 border border-slate-800 rounded-xl p-4 space-y-3">
+        <h2 class="text-xs font-bold uppercase tracking-wider text-slate-400">Neural Sub-system Telemetry</h2>
+        
+        <!-- 1. Facial Distress Analyzer -->
+        <div>
+          <div class="flex justify-between text-xs mb-1">
+            <span class="text-slate-300 flex items-center gap-1.5">
+              <span>👤</span> Facial Distress (Micro-expression)
+            </span>
+            <span id="val-face-distress" class="font-mono text-emerald-400 font-semibold">Calm (6%)</span>
+          </div>
+          <div class="w-full bg-slate-800 h-1.5 rounded-full overflow-hidden">
+            <div id="bar-face-distress" class="bg-emerald-500 h-full rounded-full transition-all duration-300" style="width: 6%"></div>
+          </div>
+          <div class="text-[10px] text-slate-500 mt-0.5 flex justify-between">
+            <span>Eye wideness / Mouth aspect ratio</span>
+            <span id="label-face-emotion">Emotion: Neutral</span>
+          </div>
+        </div>
+
+        <!-- 2. Distress Signals & Gestures -->
+        <div>
+          <div class="flex justify-between text-xs mb-1">
+            <span class="text-slate-300 flex items-center gap-1.5">
+              <span>✋</span> Hand Signal / Defensive Gesture
+            </span>
+            <span id="val-gesture" class="font-mono text-emerald-400 font-semibold">None (0%)</span>
+          </div>
+          <div class="w-full bg-slate-800 h-1.5 rounded-full overflow-hidden">
+            <div id="bar-gesture" class="bg-emerald-500 h-full rounded-full transition-all duration-300" style="width: 0%"></div>
+          </div>
+          <div class="text-[10px] text-slate-500 mt-0.5 flex justify-between">
+            <span>Universal SOS (Palm-to-Thumb Fold)</span>
+            <span id="label-gesture-type">Posture: Relaxed</span>
+          </div>
+        </div>
+
+        <!-- 3. Surrounding Crowd Density & Proximity -->
+        <div>
+          <div class="flex justify-between text-xs mb-1">
+            <span class="text-slate-300 flex items-center gap-1.5">
+              <span>👥</span> Crowd Encirclement / Isolation
+            </span>
+            <span id="val-crowd" class="font-mono text-emerald-400 font-semibold">Nominal (18%)</span>
+          </div>
+          <div class="w-full bg-slate-800 h-1.5 rounded-full overflow-hidden">
+            <div id="bar-crowd" class="bg-emerald-500 h-full rounded-full transition-all duration-300" style="width: 18%"></div>
+          </div>
+          <div class="text-[10px] text-slate-500 mt-0.5 flex justify-between">
+            <span>Spatial clustering & cornering ratio</span>
+            <span id="label-crowd-density">Distance: > 2.8m</span>
+          </div>
+        </div>
+
+        <!-- 4. Defensive / Struggle Motion Dynamics -->
+        <div>
+          <div class="flex justify-between text-xs mb-1">
+            <span class="text-slate-300 flex items-center gap-1.5">
+              <span>⚡</span> Kinetic Agitation / Struggle
+            </span>
+            <span id="val-motion" class="font-mono text-emerald-400 font-semibold">Steady (8%)</span>
+          </div>
+          <div class="w-full bg-slate-800 h-1.5 rounded-full overflow-hidden">
+            <div id="bar-motion" class="bg-emerald-500 h-full rounded-full transition-all duration-300" style="width: 8%"></div>
+          </div>
+          <div class="text-[10px] text-slate-500 mt-0.5 flex justify-between">
+            <span>Optical flow acceleration vector</span>
+            <span id="label-motion-type">Velocity: 1.1 m/s</span>
+          </div>
+        </div>
+      </div>
+
+      <!-- Real-Time Automated Incident & Dispatch Log -->
+      <div class="bg-slate-900 border border-slate-800 rounded-xl p-4 flex-1 flex flex-col">
+        <div class="flex items-center justify-between mb-2">
+          <h2 class="text-xs font-bold uppercase tracking-wider text-slate-400">Automated Audit & Dispatch Stream</h2>
+          <span class="text-[11px] text-slate-500 font-mono">LIVE LOG</span>
+        </div>
+        <div id="audit-log" class="space-y-1.5 font-mono text-[11px] overflow-y-auto max-h-48 pr-1 scrollbar-thin">
+          <div class="text-slate-500"><span class="text-slate-400">[19:50:01]</span> System initialized. CCTV stream synced.</div>
+          <div class="text-emerald-400"><span class="text-slate-400">[19:50:15]</span> Face & Pose inference pipelines online (MediaPipe+YOLO).</div>
+          <div class="text-slate-400"><span class="text-slate-500">[19:51:00]</span> Monitoring West Alleyway feed. All parameters nominal.</div>
+        </div>
+      </div>
+
+    </div>
+  </div>
+
+  <!-- Operational Architecture Reference Card -->
+  <footer class="mt-6 bg-slate-900/60 border border-slate-800/80 rounded-xl p-4 text-xs text-slate-400">
+    <div class="grid grid-cols-1 md:grid-cols-4 gap-4">
+      <div>
+        <h4 class="font-bold text-slate-200 mb-1">1. Frame Ingestion</h4>
+        <p>Continuous RTSP/HLS stream decoding at 60 FPS. Dynamic contrast & low-light infrared enhancement.</p>
+      </div>
+      <div>
+        <h4 class="font-bold text-slate-200 mb-1">2. Distress Expression</h4>
+        <p>Eye Aspect Ratio (EAR), Mouth Opening Ratio (MOR), and deep facial action unit (AU1, AU4, AU20) panic mapping.</p>
+      </div>
+      <div>
+        <h4 class="font-bold text-slate-200 mb-1">3. Signal & Gesture AI</h4>
+        <p>Universal Hand Signal for Help detection (Canadian Women's Foundation standard) + 21 3D hand keypoints tracking.</p>
+      </div>
+      <div>
+        <h4 class="font-bold text-slate-200 mb-1">4. Safety Alert Protocol</h4>
+        <p>Multi-indicator Bayesian fusion. Triggers audio-visual deterrent, GPS transmission, and fast responder dispatch.</p>
+      </div>
+    </div>
+  </footer>
+
+  <!-- Simulation JavaScript Engine -->
+  <script>
+    const canvas = document.getElementById('cctv-canvas');
+    const ctx = canvas.getContext('2d');
+    
+    // UI Elements
+    const hudTimestamp = document.getElementById('hud-timestamp');
+    const hudSubjectCount = document.getElementById('hud-subject-count');
+    const hudThreatLevel = document.getElementById('hud-threat-level');
+    const hudCrowdDensity = document.getElementById('hud-crowd-density');
+    const vulnPercentage = document.getElementById('vuln-percentage');
+    const vulnBar = document.getElementById('vuln-bar');
+    const threatBadge = document.getElementById('threat-badge');
+    const alertBanner = document.getElementById('alert-banner');
+    const auditLog = document.getElementById('audit-log');
+    const thresholdSlider = document.getElementById('threshold-slider');
+    const thresholdVal = document.getElementById('threshold-val');
+
+    // Indicator bars
+    const barFace = document.getElementById('bar-face-distress');
+    const valFace = document.getElementById('val-face-distress');
+    const labelFace = document.getElementById('label-face-emotion');
+
+    const barGesture = document.getElementById('bar-gesture');
+    const valGesture = document.getElementById('val-gesture');
+    const labelGesture = document.getElementById('label-gesture-type');
+
+    const barCrowd = document.getElementById('bar-crowd');
+    const valCrowd = document.getElementById('val-crowd');
+    const labelCrowd = document.getElementById('label-crowd-density');
+
+    const barMotion = document.getElementById('bar-motion');
+    const valMotion = document.getElementById('val-motion');
+    const labelMotion = document.getElementById('label-motion-type');
+
+    let currentScenario = 'normal';
+    let alertTriggered = false;
+    let audioContext = null;
+    let sirenOsc = null;
+    let isAudioEnabled = false;
+
+    thresholdSlider.addEventListener('input', (e) => {
+      thresholdVal.textContent = e.target.value + '%';
+    });
+
+    // Web Audio API Siren Synthesis
+    document.getElementById('audio-toggle-btn').addEventListener('click', () => {
+      if (!audioContext) {
+        audioContext = new (window.AudioContext || window.webkitAudioContext)();
+      }
+      isAudioEnabled = !isAudioEnabled;
+      document.getElementById('audio-icon').textContent = isAudioEnabled ? '🔔' : '🔇';
+      document.getElementById('audio-text').textContent = isAudioEnabled ? 'Siren: Active' : 'Siren: Muted';
+      if (!isAudioEnabled && sirenOsc) {
+        sirenOsc.stop();
+        sirenOsc = null;
+      }
+    });
+
+    function playSiren() {
+      if (!isAudioEnabled || sirenOsc) return;
+      try {
+        if (!audioContext) audioContext = new (window.AudioContext || window.webkitAudioContext)();
+        sirenOsc = audioContext.createOscillator();
+        const gainNode = audioContext.createGain();
+        sirenOsc.type = 'sawtooth';
+        sirenOsc.frequency.setValueAtTime(600, audioContext.currentTime);
+        sirenOsc.frequency.exponentialRampToValueAtTime(1100, audioContext.currentTime + 0.4);
+        gainNode.gain.setValueAtTime(0.15, audioContext.currentTime);
+        sirenOsc.connect(gainNode);
+        gainNode.connect(audioContext.destination);
+        sirenOsc.start();
+        setTimeout(() => {
+          if (sirenOsc) {
+            sirenOsc.stop();
+            sirenOsc = null;
+          }
+        }, 1200);
+      } catch (e) {
+        console.error(e);
+      }
+    }
+
+    function addLogEntry(text, type = 'info') {
+      const entry = document.createElement('div');
+      const timeStr = new Date().toTimeString().split(' ')[0];
+      let colorClass = 'text-slate-400';
+      if (type === 'critical') colorClass = 'text-rose-400 font-bold';
+      else if (type === 'warn') colorClass = 'text-amber-400';
+      else if (type === 'success') colorClass = 'text-emerald-400';
+
+      entry.className = colorClass;
+      entry.innerHTML = `<span class="text-slate-500">[${timeStr}]</span> ${text}`;
+      auditLog.appendChild(entry);
+      auditLog.scrollTop = auditLog.scrollHeight;
+    }
+
+    function dismissAlert() {
+      alertBanner.classList.add('hidden');
+      alertTriggered = false;
+      addLogEntry('Alert acknowledged by surveillance control room.', 'info');
+    }
+
+    // Scenarios Setup
+    function setScenario(scen) {
+      currentScenario = scen;
+      alertTriggered = false;
+      alertBanner.classList.add('hidden');
+
+      // Update button highlights
+      ['normal', 'encircled', 'distress_gesture', 'critical_threat'].forEach(s => {
+        const btn = document.getElementById(`btn-${s === 'distress_gesture' ? 'distress' : s === 'critical_threat' ? 'threat' : s}`);
+        if (btn) {
+          if (s === scen) {
+            btn.classList.add('ring-2', 'ring-rose-500');
+          } else {
+            btn.classList.remove('ring-2', 'ring-rose-500');
+          }
+        }
+      });
+
+      if (scen === 'normal') {
+        addLogEntry('Switched to Scenario: Normal Pedestrian Transit. Low threat.', 'success');
+      } else if (scen === 'encircled') {
+        addLogEntry('Switched to Scenario: Spatial Encirclement & Cornering pattern detected.', 'warn');
+      } else if (scen === 'distress_gesture') {
+        addLogEntry('Switched to Scenario: Distress Gesture Signal recognized from Subject ID-01.', 'warn');
+      } else if (scen === 'critical_threat') {
+        addLogEntry('Switched to Scenario: CRITICAL ESCALATION. Distress + Gesture + Encirclement.', 'critical');
+      }
+    }
+
+    // Agents in the scene
+    let frameCount = 0;
+    const subjects = [
+      { id: 'SUBJ-01 [F]', x: 380, y: 220, targetX: 380, targetY: 220, speed: 1.0, isTarget: true },
+      { id: 'SUBJ-02 [M]', x: 280, y: 190, targetX: 280, targetY: 190, speed: 0.9 },
+      { id: 'SUBJ-03 [M]', x: 480, y: 210, targetX: 480, targetY: 210, speed: 0.8 },
+      { id: 'SUBJ-04 [M]', x: 390, y: 310, targetX: 390, targetY: 310, speed: 0.7 }
+    ];
+
+    function updateSimulation() {
+      frameCount++;
+      const now = new Date();
+      hudTimestamp.textContent = now.toISOString().replace('T', ' ').slice(0, 19) + ' UTC';
+
+      // Telemetry values based on current scenario
+      let faceScore = 6;
+      let gestureScore = 0;
+      let crowdScore = 15;
+      let motionScore = 10;
+      let emotion = 'Neutral';
+      let gesture = 'Relaxed';
+      let statusStr = 'SECURE';
+      let statusColor = 'emerald';
+
+      if (currentScenario === 'normal') {
+        subjects[0].targetX = 400 + Math.sin(frameCount * 0.03) * 60;
+        subjects[0].targetY = 240 + Math.cos(frameCount * 0.02) * 20;
+
+        subjects[1].targetX = 180 + Math.sin(frameCount * 0.02) * 50;
+        subjects[1].targetY = 160;
+
+        subjects[2].targetX = 600 + Math.cos(frameCount * 0.025) * 40;
+        subjects[2].targetY = 280;
+
+        subjects[3].targetX = 320 + Math.sin(frameCount * 0.015) * 80;
+        subjects[3].targetY = 340;
+
+        faceScore = 5 + Math.floor(Math.sin(frameCount * 0.05) * 3);
+        gestureScore = 0;
+        crowdScore = 14 + Math.floor(Math.cos(frameCount * 0.04) * 5);
+        motionScore = 9;
+        emotion = 'Neutral / Calm';
+        gesture = 'Open / Normal Walk';
+      } 
+      else if (currentScenario === 'encircled') {
+        // Encircle subject 0
+        subjects[0].targetX = 390 + Math.sin(frameCount * 0.05) * 15;
+        subjects[0].targetY = 230;
+
+        subjects[1].targetX = subjects[0].x - 60;
+        subjects[1].targetY = subjects[0].y - 30;
+
+        subjects[2].targetX = subjects[0].x + 65;
+        subjects[2].targetY = subjects[0].y - 20;
+
+        subjects[3].targetX = subjects[0].x + 10;
+        subjects[3].targetY = subjects[0].y + 60;
+
+        faceScore = 48 + Math.floor(Math.sin(frameCount * 0.1) * 8);
+        gestureScore = 20;
+        crowdScore = 78 + Math.floor(Math.sin(frameCount * 0.05) * 6);
+        motionScore = 35;
+        emotion = 'Anxiety / Apprehension';
+        gesture = 'Guarded Stance';
+        statusStr = 'ELEVATED RISK';
+        statusColor = 'amber';
+      }
+      else if (currentScenario === 'distress_gesture') {
+        // Subject 0 displays universal SOS hand signal
+        subjects[0].targetX = 390;
+        subjects[0].targetY = 230;
+
+        subjects[1].targetX = 220;
+        subjects[1].targetY = 180;
+        subjects[2].targetX = 540;
+        subjects[2].targetY = 200;
+        subjects[3].targetX = 380;
+        subjects[3].targetY = 360;
+
+        faceScore = 72 + Math.floor(Math.sin(frameCount * 0.1) * 6);
+        gestureScore = 94; // Signal for help
+        crowdScore = 42;
+        motionScore = 40;
+        emotion = 'Fear / Silent Panic';
+        gesture = '🚨 Universal SOS Signal for Help';
+        statusStr = 'DISTRESS SIGNAL';
+        statusColor = 'orange';
+      }
+      else if (currentScenario === 'critical_threat') {
+        // High crowd density + SOS Gesture + Panic Expression + Defensive arms
+        subjects[0].targetX = 380 + Math.sin(frameCount * 0.1) * 10;
+        subjects[0].targetY = 220 + Math.cos(frameCount * 0.12) * 8;
+
+        subjects[1].targetX = subjects[0].x - 45;
+        subjects[1].targetY = subjects[0].y - 15;
+
+        subjects[2].targetX = subjects[0].x + 50;
+        subjects[2].targetY = subjects[0].y - 10;
+
+        subjects[3].targetX = subjects[0].x + 5;
+        subjects[3].targetY = subjects[0].y + 50;
+
+        faceScore = 94 + Math.floor(Math.sin(frameCount * 0.2) * 5);
+        gestureScore = 97;
+        crowdScore = 92 + Math.floor(Math.sin(frameCount * 0.1) * 4);
+        motionScore = 88;
+        emotion = 'Extreme Distress / Terror';
+        gesture = '🚨 SOS Signal + Defensive Pushback';
+        statusStr = 'CRITICAL ALERT';
+        statusColor = 'rose';
+      }
+
+      // Smooth move agents
+      subjects.forEach(s => {
+        s.x += (s.targetX - s.x) * 0.08;
+        s.y += (s.targetY - s.y) * 0.08;
+      });
+
+      // Calculate composite score using multi-indicator Bayesian fusion
+      // V = 0.35 * Face + 0.35 * Gesture + 0.20 * Crowd + 0.10 * Motion
+      const compositeVuln = Math.min(100, (faceScore * 0.35) + (gestureScore * 0.35) + (crowdScore * 0.20) + (motionScore * 0.10));
+      const threshold = parseInt(thresholdSlider.value, 10);
+
+      // Update UI Telemetry
+      vulnPercentage.textContent = compositeVuln.toFixed(1) + '%';
+      vulnBar.style.width = compositeVuln + '%';
+
+      barFace.style.width = faceScore + '%';
+      valFace.textContent = `${emotion} (${faceScore}%)`;
+      labelFace.textContent = `AU1+AU4: ${faceScore > 60 ? 'Extreme' : 'Nominal'}`;
+
+      barGesture.style.width = gestureScore + '%';
+      valGesture.textContent = `${gestureScore > 50 ? 'SOS Detected' : 'None'} (${gestureScore}%)`;
+      labelGesture.textContent = gesture;
+
+      barCrowd.style.width = crowdScore + '%';
+      valCrowd.textContent = `${crowdScore > 70 ? 'Encirclement' : 'Nominal'} (${crowdScore}%)`;
+      labelCrowd.textContent = `Proximity: ${crowdScore > 70 ? '< 1.1m (Critical)' : '> 2.5m'}`;
+
+      barMotion.style.width = motionScore + '%';
+      valMotion.textContent = `${motionScore > 60 ? 'Struggle/High' : 'Steady'} (${motionScore}%)`;
+
+      // Update status badges
+      if (compositeVuln >= threshold) {
+        threatBadge.className = 'px-2 py-0.5 text-xs font-bold rounded bg-rose-950 text-rose-300 border border-rose-600 animate-pulse';
+        threatBadge.textContent = 'CRITICAL THREAT';
+        hudThreatLevel.textContent = `${compositeVuln.toFixed(0)}% [EMERGENCY]`;
+        hudThreatLevel.className = 'text-rose-400 font-bold';
+
+        if (!alertTriggered) {
+          alertTriggered = true;
+          alertBanner.classList.remove('hidden');
+          playSiren();
+          addLogEntry(`🚨 AUTOMATED SAFETY PROTOCOL FIRED! Vulnerability Index: ${compositeVuln.toFixed(1)}%. GPS & Snapshot transmitted.`, 'critical');
+        }
+      } else if (compositeVuln >= 40) {
+        threatBadge.className = 'px-2 py-0.5 text-xs font-bold rounded bg-amber-950 text-amber-300 border border-amber-600';
+        threatBadge.textContent = 'ELEVATED RISK';
+        hudThreatLevel.textContent = `${compositeVuln.toFixed(0)}% [WARNING]`;
+        hudThreatLevel.className = 'text-amber-400 font-bold';
+      } else {
+        threatBadge.className = 'px-2 py-0.5 text-xs font-bold rounded bg-emerald-950 text-emerald-400 border border-emerald-800';
+        threatBadge.textContent = 'SECURE';
+        hudThreatLevel.textContent = `${compositeVuln.toFixed(0)}% [SECURE]`;
+        hudThreatLevel.className = 'text-emerald-400';
+      }
+
+      // Draw CCTV Frame
+      drawCCTVFrame(compositeVuln >= threshold);
+
+      requestAnimationFrame(updateSimulation);
+    }
+
+    function drawCCTVFrame(isAlert) {
+      // Background: Dark alleyway / urban setting
+      ctx.fillStyle = '#080d1a';
+      ctx.fillRect(0, 0, canvas.width, canvas.height);
+
+      // Perspective street grid
+      ctx.strokeStyle = '#141f36';
+      ctx.lineWidth = 1;
+      for (let x = 0; x < canvas.width; x += 40) {
+        ctx.beginPath();
+        ctx.moveTo(x, 140);
+        ctx.lineTo(x * 1.5 - 200, canvas.height);
+        ctx.stroke();
+      }
+      for (let y = 140; y < canvas.height; y += 30) {
+        ctx.beginPath();
+        ctx.moveTo(0, y);
+        ctx.lineTo(canvas.width, y);
+        ctx.stroke();
+      }
+
+      // Street lamp / ambient light pool
+      const grad = ctx.createRadialGradient(380, 220, 10, 380, 220, 220);
+      grad.addColorStop(0, isAlert ? 'rgba(239, 68, 68, 0.25)' : 'rgba(245, 158, 11, 0.12)');
+      grad.addColorStop(1, 'rgba(8, 13, 26, 0)');
+      ctx.fillStyle = grad;
+      ctx.fillRect(0, 0, canvas.width, canvas.height);
+
+      // Draw Proximity Warning Ring if encircled
+      if (document.getElementById('chk-proximity').checked) {
+        const target = subjects[0];
+        ctx.beginPath();
+        ctx.arc(target.x, target.y + 45, 95, 0, Math.PI * 2);
+        ctx.strokeStyle = isAlert ? 'rgba(239, 68, 68, 0.7)' : (currentScenario === 'encircled' ? 'rgba(245, 158, 11, 0.5)' : 'rgba(16, 185, 129, 0.2)');
+        ctx.lineWidth = isAlert ? 2 : 1;
+        ctx.setLineDash([4, 4]);
+        ctx.stroke();
+        ctx.setLineDash([]);
+
+        if (isAlert || currentScenario === 'encircled') {
+          ctx.fillStyle = isAlert ? 'rgba(239, 68, 68, 0.9)' : 'rgba(245, 158, 11, 0.9)';
+          ctx.font = '10px monospace';
+          ctx.fillText(`PROXIMITY BREACH (<1.2m)`, target.x - 65, target.y - 65);
+        }
+      }
+
+      // Render Each Individual
+      subjects.forEach(s => {
+        const isVulnerable = s.isTarget;
+        const boxColor = isAlert && isVulnerable ? '#ef4444' : (isVulnerable && currentScenario !== 'normal' ? '#f59e0b' : '#06b6d4');
+
+        // Bounding Box
+        const w = 48;
+        const h = 100;
+        const bx = s.x - w / 2;
+        const by = s.y - h / 2;
+
+        ctx.strokeStyle = boxColor;
+        ctx.lineWidth = isVulnerable ? 2 : 1.5;
+        ctx.strokeRect(bx, by, w, h);
+
+        // Corner reticles
+        const len = 7;
+        ctx.lineWidth = 3;
+        // Top-left
+        ctx.beginPath(); ctx.moveTo(bx, by + len); ctx.lineTo(bx, by); ctx.lineTo(bx + len, by); ctx.stroke();
+        // Top-right
+        ctx.beginPath(); ctx.moveTo(bx + w - len, by); ctx.lineTo(bx + w, by); ctx.lineTo(bx + w, by + len); ctx.stroke();
+        // Bottom-left
+        ctx.beginPath(); ctx.moveTo(bx, by + h - len); ctx.lineTo(bx, by + h); ctx.lineTo(bx + len, by + h); ctx.stroke();
+        // Bottom-right
+        ctx.beginPath(); ctx.moveTo(bx + w - len, by + h); ctx.lineTo(bx + w, by + h); ctx.lineTo(bx + w, by + h - len); ctx.stroke();
+
+        // Label Tag
+        ctx.fillStyle = boxColor;
+        ctx.fillRect(bx, by - 16, w + 35, 16);
+        ctx.fillStyle = '#000';
+        ctx.font = 'bold 9px monospace';
+        ctx.fillText(s.id, bx + 3, by - 4);
+
+        // Pose Skeleton (Stick & Keypoint visualization)
+        if (document.getElementById('chk-skeletons').checked) {
+          ctx.strokeStyle = boxColor;
+          ctx.fillStyle = '#ffffff';
+          ctx.lineWidth = 1.5;
+
+          // Head
+          const headY = by + 18;
+          ctx.beginPath();
+          ctx.arc(s.x, headY, 10, 0, Math.PI * 2);
+          ctx.stroke();
+
+          // Torso
+          ctx.beginPath();
+          ctx.moveTo(s.x, headY + 10);
+          ctx.lineTo(s.x, by + 65);
+          ctx.stroke();
+
+          // Arms & Gestures
+          const shoulderY = headY + 14;
+          if (isVulnerable && (currentScenario === 'distress_gesture' || currentScenario === 'critical_threat')) {
+            // Right arm raised with hand open showing SOS signal
+            ctx.beginPath();
+            ctx.moveTo(s.x, shoulderY);
+            ctx.lineTo(s.x + 22, shoulderY - 8);
+            ctx.lineTo(s.x + 26, headY - 10);
+            ctx.stroke();
+
+            // Hand SOS icon
+            ctx.fillStyle = '#ef4444';
+            ctx.beginPath();
+            ctx.arc(s.x + 26, headY - 10, 4, 0, Math.PI * 2);
+            ctx.fill();
+
+            // SOS Signal callout badge
+            ctx.fillStyle = 'rgba(239, 68, 68, 0.9)';
+            ctx.fillRect(s.x + 32, headY - 22, 95, 18);
+            ctx.fillStyle = '#ffffff';
+            ctx.font = 'bold 8px monospace';
+            ctx.fillText('✋ SIGNAL FOR HELP', s.x + 35, headY - 10);
+
+            // Left arm defensive
+            ctx.strokeStyle = boxColor;
+            ctx.beginPath();
+            ctx.moveTo(s.x, shoulderY);
+            ctx.lineTo(s.x - 18, shoulderY + 8);
+            ctx.lineTo(s.x - 12, headY + 4);
+            ctx.stroke();
+          } else {
+            // Normal walking arms
+            const armSwing = Math.sin(frameCount * 0.1) * 8;
+            ctx.beginPath();
+            ctx.moveTo(s.x, shoulderY);
+            ctx.lineTo(s.x - 14, shoulderY + 15 + armSwing);
+            ctx.stroke();
+
+            ctx.beginPath();
+            ctx.moveTo(s.x, shoulderY);
+            ctx.lineTo(s.x + 14, shoulderY + 15 - armSwing);
+            ctx.stroke();
+          }
+
+          // Legs
+          const legSwing = Math.sin(frameCount * 0.1) * 12;
+          ctx.beginPath();
+          ctx.moveTo(s.x, by + 65);
+          ctx.lineTo(s.x - 10, by + 98 + legSwing);
+          ctx.stroke();
+
+          ctx.beginPath();
+          ctx.moveTo(s.x, by + 65);
+          ctx.lineTo(s.x + 10, by + 98 - legSwing);
+          ctx.stroke();
+        }
+
+        // Facial Landmark Mesh Overlay (for target)
+        if (isVulnerable && document.getElementById('chk-faces').checked) {
+          const headY = by + 18;
+          ctx.strokeStyle = isAlert ? '#f87171' : '#38bdf8';
+          ctx.lineWidth = 0.8;
+          // Mesh points (eyes, eyebrows, mouth)
+          const pts = [
+            { x: s.x - 4, y: headY - 2 },
+            { x: s.x + 4, y: headY - 2 },
+            { x: s.x, y: headY + 1 },
+            { x: s.x - 3, y: headY + 4 },
+            { x: s.x + 3, y: headY + 4 }
+          ];
+          pts.forEach(p => {
+            ctx.fillStyle = '#ffffff';
+            ctx.fillRect(p.x - 1, p.y - 1, 2, 2);
+          });
+          // Connect mesh
+          ctx.beginPath();
+          ctx.moveTo(pts[0].x, pts[0].y);
+          ctx.lineTo(pts[1].x, pts[1].y);
+          ctx.lineTo(pts[2].x, pts[2].y);
+          ctx.closePath();
+          ctx.stroke();
+
+          if (isAlert) {
+            ctx.fillStyle = '#ef4444';
+            ctx.font = '8px monospace';
+            ctx.fillText('FEAR 94%', bx - 4, by + h + 12);
+          }
+        }
+      });
+
+      // Strobe deterrent overlay when alert is firing
+      if (isAlert && Math.floor(frameCount / 8) % 2 === 0) {
+        ctx.fillStyle = 'rgba(239, 68, 68, 0.15)';
+        ctx.fillRect(0, 0, canvas.width, canvas.height);
+      }
+    }
+
+    // Initialize simulation
+    updateSimulation();
+  </script>
+</body>
+</html>
